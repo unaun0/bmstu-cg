@@ -281,7 +281,7 @@
             <rect>
              <x>0</x>
              <y>30</y>
-             <width>151</width>
+             <width>163</width>
              <height>80</height>
             </rect>
            </property>
@@ -617,7 +617,7 @@
             <property name="checkable">
              <bool>false</bool>
             </property>
-            <widget class="QWidget" name="">
+            <widget class="QWidget" name="layoutWidget">
              <property name="geometry">
               <rect>
                <x>10</x>
@@ -1160,7 +1160,7 @@
               <rect>
                <x>7</x>
                <y>30</y>
-               <width>311</width>
+               <width>318</width>
                <height>211</height>
               </rect>
              </property>
@@ -1606,8 +1606,8 @@
      <widget class="QGraphicsView" name="graphicsView">
       <property name="minimumSize">
        <size>
-        <width>501</width>
-        <height>480</height>
+        <width>698</width>
+        <height>755</height>
        </size>
       </property>
       <property name="maximumSize">
