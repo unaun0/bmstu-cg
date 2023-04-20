@@ -7,6 +7,10 @@ from PyQt5.QtCore import Qt, QRect, pyqtSignal
 from main_window import Ui_MainWindow
 from task_popup import Ui_TaskPopup
 from errors import ErrorInput
+from geometry import *
+
+import matplotlib.pyplot as plt
+import time
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def __init__(self): 
@@ -30,6 +34,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.pushButton_draw_range.clicked.connect(self.build_range) # draw range
         self.pushButton_clear.clicked.connect(self.clear_canvas) # clean
         self.pushButton_back.clicked.connect(self.undo) # back
+        self.pushButton_analyse.clicked.connect(self.time_analyse) # analyse time
 
     def init_stack(self):
         self.state_stack = []
@@ -125,7 +130,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         else:
             self.update_stack()
             color = QColor(self.pen_color)
-            self.draw_figure(center, radius, color)
+            self.draw_figure(center, radius, color, False)
             self.update_scene()
 
     def check_size_figure(self, center, radius):
@@ -140,7 +145,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             return True
         elif param == 0 and self.check_size_figure(center, param_value):
             return True
-        else:
+        elif param == 1:
             radius_end = (param_value[0] * count, param_value[1] * count)
             if self.check_size_figure(center, radius_end):
                 return True
@@ -176,13 +181,17 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         else:
             self.update_stack()
             color = QColor(self.pen_color)
-            self.draw_range(center, radius_start, count, action, param, color)
+            self.draw_range(center, radius_start, count, action, param, color, False)
             self.update_scene()
         
-    def draw_range(self, center, radius_start, count, action, param, color):
+    def draw_range(self, center, radius_start, count, action, param, color, timer):
         if action == 0:
-            step_x = (param[0] - radius_start[0]) / (count - 1)
-            step_y = (param[1] - radius_start[1]) / (count - 1)
+            if count > 1:
+                step_x = (param[0] - radius_start[0]) / (count - 1)
+                step_y = (param[1] - radius_start[1]) / (count - 1)
+            else:
+                step_x = (param[0] - radius_start[0])
+                step_y = (param[1] - radius_start[1])
             radius_end = (param[0], param[1])
         else:
             step_x = param[0]
@@ -191,20 +200,32 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         radius_start = list(radius_start)
         for i in range(count):
             if radius_start[0] >= radius_end[0] or radius_start[1] >= radius_end[1]:
-                self.draw_figure(center, radius_end, color)
+                self.draw_figure(center, radius_end, color, timer)
                 break
-            self.draw_figure(center, radius_start, color)
+            self.draw_figure(center, radius_start, color, timer)
             radius_start[0] += step_x
             radius_start[1] += step_y
 
-    def draw_figure(self, center, radius, color):
+    def draw_figure(self, center, radius, color, timer):
         action = self.comboBox_alg.currentIndex()
+
         center = list(center)
         center[0] += self.canvas_center[0]
         center[1] += self.canvas_center[1]
-        print(center)
+
         if action == 0:
             self.draw_ellipse(center, radius, color)
+        elif action == 1:
+            self.draw_ellipse_canonical(center, radius, color, timer)
+        elif action == 2:
+            self.draw_ellipse_parametric(center, radius, color, timer)
+        elif action == 3:
+            self.draw_ellipse_mid_point(center, radius, color, timer)
+        elif action == 4:
+            self.draw_ellipse_bresenham(center, radius, color, timer)
+        else:
+            return False
+        return True
 
     def draw_ellipse(self, center, radius, color):
         painter = QPainter(self.pixmap)
@@ -212,6 +233,76 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         painter.drawEllipse(center[0] - radius[0], center[1] - radius[1], radius[0] * 2, radius[1] * 2)
         painter.end()
 
+    def draw_point(self, point, color):
+        painter = QPainter(self.pixmap)
+        painter.setPen(QColor(color))
+        painter.drawPoint(point[0], point[1])
+        painter.end()
+
+    def draw_ellipse_canonical(self, center, radius, color, timer):
+        points = ellipse_canonical(center[0], center[1], radius[0], radius[1])
+        if not timer:
+            for point in points:
+                self.draw_point(point, color)
+
+    def draw_ellipse_parametric(self, center, radius, color, timer):
+        points = ellipse_parametric(center[0], center[1], radius[0], radius[1])
+        if not timer:
+            for point in points:
+                self.draw_point(point, color)
+
+    def draw_ellipse_bresenham(self, center, radius, color, timer):
+        points = ellipse_bresenham(center[0], center[1], radius[0], radius[1])
+        if not timer:
+            for point in points:
+                self.draw_point(point, color)
+
+    def draw_ellipse_mid_point(self, center, radius, color, timer):
+        points = ellipse_mid_point(center[0], center[1], radius[0], radius[1])
+        if not timer:
+            for point in points:
+                self.draw_point(point, color)
+
+    def time_analyse(self):
+        last_index = self.comboBox_alg.currentIndex()
+
+        sizes = [1]
+        for i in range(100, 10001, 100):
+            sizes.append(i)
+
+        time_alg = []
+        for method in range(5):
+            self.comboBox_alg.setCurrentIndex(method + 1)
+            time_size = [] * 9
+            for size in sizes:
+                average_time = 0
+                for count in range(5):
+                    time_start = time.time_ns()
+                    self.draw_figure([0, 0], [size, size], None, True)
+                    time_end = time.time_ns()
+                    average_time += (time_end - time_start)
+                average_time /= 5
+                time_size.append(average_time)
+            time_alg.append(time_size.copy())
+        
+        self.comboBox_alg.setCurrentIndex(last_index)
+
+        plt.figure(figsize=(14, 5))
+        plt.title("Анализ времени для различных алгоритмов пострения окружности\nКоличество итераций: 5\n")
+        plt.ylabel("time(ns)")
+        plt.xlabel("radius")
+        plt.plot(sizes, time_alg[0], label="канонич. ур-е")
+        plt.plot(sizes, time_alg[1], linestyle = '--', label="парам. ур-е")
+        plt.plot(sizes, time_alg[2], linestyle = '-.', label="алг-м средней точки")
+        plt.plot(sizes, time_alg[3], linestyle = ':', label="алг-м Брезенхема")
+        ticks = [1]
+        for i in range(1000, 10001, 1000):
+            ticks.append(i)
+        print(ticks)
+        plt.xticks(ticks)
+        plt.legend()
+        plt.show()
+        
     def show_info(self):
         self.sub_window = Info()
         self.sub_window.show()
