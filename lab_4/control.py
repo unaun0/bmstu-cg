@@ -12,6 +12,25 @@ from geometry import *
 import matplotlib.pyplot as plt
 import time
 
+'''
+def keyPressEvent(self, event):
+        if event.key() == Qt.Key_Plus or event.key() == Qt.Key_Equal:
+            sub_scale = self.scale * 1.1
+            if sub_scale >= 250:
+                ErrorInput("Ошибка. Достигнут максимальный масштаб.")
+            else:
+                self.scale = sub_scale
+                self.graphicsView.scale(1.1, 1.1)
+            
+        elif event.key() == Qt.Key_Minus:
+            sub_scale = self.scale * 0.9
+            if sub_scale <= 0.3:
+                ErrorInput("Ошибка. Достигнут минимальный масштаб.")
+            else:
+                self.scale = sub_scale
+                self.graphicsView.scale(0.9, 0.9)
+'''
+
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def __init__(self): 
         super(MainWindow, self).__init__()
