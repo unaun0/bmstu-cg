@@ -12,25 +12,6 @@ from geometry import *
 import matplotlib.pyplot as plt
 import time
 
-'''
-def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Plus or event.key() == Qt.Key_Equal:
-            sub_scale = self.scale * 1.1
-            if sub_scale >= 250:
-                ErrorInput("Ошибка. Достигнут максимальный масштаб.")
-            else:
-                self.scale = sub_scale
-                self.graphicsView.scale(1.1, 1.1)
-            
-        elif event.key() == Qt.Key_Minus:
-            sub_scale = self.scale * 0.9
-            if sub_scale <= 0.3:
-                ErrorInput("Ошибка. Достигнут минимальный масштаб.")
-            else:
-                self.scale = sub_scale
-                self.graphicsView.scale(0.9, 0.9)
-'''
-
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def __init__(self): 
         super(MainWindow, self).__init__()
@@ -76,6 +57,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         self.bg_color = QColor(255, 255, 255)
         self.pen_color = QColor(0, 0, 0)
+        self.scale = 1
 
         self.update_stack()
     
@@ -121,9 +103,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.pixmap.fill(Qt.transparent)
         
         self.scene.addPixmap(self.pixmap)
+        self.graphicsView.resetTransform()
 
         self.bg_color = QColor(255, 255, 255)
         self.pen_color = QColor(0, 0, 0)
+        self.scale = 1
 
         self.set_bg_color(self.bg_color)
         self.set_pen_color(self.pen_color)
@@ -354,23 +338,20 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_Plus or event.key() == Qt.Key_Equal:
-            current_scale = self.graphicsView.transform().m11()
-            new_scale = current_scale * 1.1
-            view_center = self.graphicsView.viewport().rect().center()
-            scene_center = self.graphicsView.mapToScene(view_center)
-            print(view_center, scene_center)
-            self.graphicsView.scale(new_scale, new_scale)
-            scene_center = self.graphicsView.mapToScene(view_center)
-            self.graphicsView.centerOn(scene_center)
+            sub_scale = self.scale * 1.1
+            if sub_scale >= 200:
+                ErrorInput("Достигнут максимальный масштаб.")
+            else:
+                self.scale = sub_scale
+                self.graphicsView.scale(1.1, 1.1)
+            
         elif event.key() == Qt.Key_Minus:
-            current_scale = self.graphicsView.transform().m11()
-            new_scale = current_scale * 0.9
-            view_center = self.graphicsView.viewport().rect().center()
-            scene_center = self.graphicsView.mapToScene(view_center)
-            print(view_center, scene_center)
-            self.graphicsView.scale(new_scale, new_scale)
-            scene_center = self.graphicsView.mapToScene(view_center)
-            self.graphicsView.centerOn(scene_center)
+            sub_scale = self.scale * 0.9
+            if sub_scale <= 0.3:
+                ErrorInput("Достигнут минимальный масштаб.")
+            else:
+                self.scale = sub_scale
+                self.graphicsView.scale(0.9, 0.9)
 
     def mousePressEvent(self, event):
         if self.canvas_init:
