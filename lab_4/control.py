@@ -1,14 +1,15 @@
 from PyQt5 import QtWidgets, QtCore, QtGui
 from PyQt5.QtGui import QColor, QPen, QPixmap, QPainter
-from PyQt5.QtWidgets import QWidget, QMainWindow, QMessageBox, QColorDialog, QDialog
+from PyQt5.QtWidgets import QWidget, QMainWindow, QMessageBox, QColorDialog, QPushButton
 from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsPixmapItem, QGraphicsScene
 from PyQt5.QtCore import Qt, QRect, pyqtSignal
 
 from main_window import Ui_MainWindow
 from task_popup import Ui_TaskPopup
 from errors import ErrorInput
-from geometry import *
 
+from geometry import *
+from math import ceil
 import matplotlib.pyplot as plt
 import time
 
@@ -16,6 +17,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def __init__(self): 
         super(MainWindow, self).__init__()
         self.setupUi(self)
+        self.set_value()
         self.init_stack()
         self.init_canvas()
         self.bindActions()
@@ -36,12 +38,22 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.pushButton_back.clicked.connect(self.undo) # back
         self.pushButton_analyse.clicked.connect(self.time_analyse) # analyse time
 
+    def set_value(self):
+        self.doubleSpinBox_xc.setValue(0.0)
+        self.doubleSpinBox_yc.setValue(0.0)
+        self.spinBox_count.setValue(1)
+        self.doubleSpinBox_rx.setValue(50)
+        self.doubleSpinBox_ry.setValue(50)
+        self.doubleSpinBox_xstart_3.setValue(1)
+        self.doubleSpinBox_ystart_3.setValue(1)
+        self.doubleSpinBox_deltax.setValue(25)
+        self.doubleSpinBox_deltay.setValue(25)
+
     def init_stack(self):
         self.state_stack = []
         self.stack_size = 10
 
     def init_canvas(self):
-        self.canvas_init = True
         self.scene = QtWidgets.QGraphicsScene(self)
         self.graphicsView.setScene(self.scene)
         self.graphicsView.setAlignment(Qt.AlignHCenter | Qt.AlignVCenter)
@@ -59,11 +71,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.pen_color = QColor(0, 0, 0)
         self.scale = 1
 
+        self.graphicsView.mousePressEvent = self.pointSelectEvent
+        self.graphicsView.mouseMoveEvent = self.canvasMoveEvent
+        self.graphicsView.wheelEvent = self.zoomWheelEvent
         self.update_stack()
     
     def scrollbar_refresh(self):
-        self.graphicsView.horizontalScrollBar().setValue(self.canvas_center[0] - (self.view_size[0] / 2))
-        self.graphicsView.verticalScrollBar().setValue(self.canvas_center[1] - (self.view_size[1] / 2)) 
+        self.graphicsView.horizontalScrollBar().setValue(int(self.canvas_center[0] - (self.view_size[0] // 2)))
+        self.graphicsView.verticalScrollBar().setValue(int(self.canvas_center[1] - (self.view_size[1] // 2)))
 
     def update_scene(self):
         self.scene.addPixmap(self.pixmap)
@@ -97,6 +112,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.canvas_center = (self.canvas_size[0] / 2, self.canvas_size[1] / 2)
 
         self.scene.clear()
+
         self.update_stack()
 
         self.pixmap = QPixmap(5002, 5002)
@@ -112,6 +128,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.set_bg_color(self.bg_color)
         self.set_pen_color(self.pen_color)
 
+        self.set_value()
         self.scrollbar_refresh()
 
     def build_figure(self):
@@ -127,7 +144,13 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         elif radius_y == 0:
             ErrorInput("Невозможно построить фигуру. Радиус Ry должен быть больше нуля.")
             return
+        
+        if radius_x < 0.5:
+            radius_x = 0.5
+        if radius_y < 0.5:
+            radius_y = 0.5
         radius = (radius_x, radius_y)
+
         if self.check_size_figure(center, radius):
             ErrorInput("Невозможно построить фигуру. Превышен максимальный размер холста.")
         else:
@@ -161,6 +184,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if radius_x <= 0 or radius_y <= 0:
             ErrorInput("Невозможно построить спектр. Радиус Rx / Ry должен быть больше нуля.")
             return
+        if radius_x < 0.5:
+            radius_x = 0.5
+        if radius_y < 0.5:
+            radius_y = 0.5
         radius_start = (radius_x, radius_y)
 
         count = (int(self.spinBox_count.value()))
@@ -171,14 +198,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         action = self.comboBox_param.currentIndex()
         param = ((float(self.doubleSpinBox_deltax.value())), 
                  (float(self.doubleSpinBox_deltay.value())))
-        if param[0] <= 0 or param[1] <= 0:
-            ErrorInput("Невозможно построить спектр. Конечный радиус / шаг должен быть больше нуля.")
-            return
         if action == 0:
             if param[0] < radius_start[0] or param[1] < radius_start[1]:
                 ErrorInput("Невозможно построить спектр. Конечный радиус должен быть больше начального.")
-                return
-            
+                return 
         if self.check_size_range(center, radius_start, count, action, param):
             ErrorInput("Невозможно построить спектр. Превышен максимальный размер холста.")
         else:
@@ -190,21 +213,24 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def draw_range(self, center, radius_start, count, action, param, color, timer):
         if action == 0:
             if count > 1:
-                step_x = (param[0] - radius_start[0]) / (count - 1)
-                step_y = (param[1] - radius_start[1]) / (count - 1)
+                step_x = abs(param[0] - radius_start[0]) / (count - 1)
+                step_y = abs(param[1] - radius_start[1]) / (count - 1)
             else:
-                step_x = (param[0] - radius_start[0])
-                step_y = (param[1] - radius_start[1])
+                step_x = abs(param[0] - radius_start[0])
+                step_y = abs(param[1] - radius_start[1])
             radius_end = (param[0], param[1])
         else:
             step_x = param[0]
             step_y = param[1]
-            radius_end = (param[0] * count, param[1] * count)
+            radius_x = step_x * count
+            radius_y = step_y * count
+            if radius_x == 0:
+                radius_x = radius_start[0]
+            if radius_y == 0:
+                radius_y = radius_start[1]
+            radius_end = (radius_x, radius_y)
         radius_start = list(radius_start)
         for i in range(count):
-            if radius_start[0] >= radius_end[0] or radius_start[1] >= radius_end[1]:
-                self.draw_figure(center, radius_end, color, timer)
-                break
             self.draw_figure(center, radius_start, color, timer)
             radius_start[0] += step_x
             radius_start[1] += step_y
@@ -232,14 +258,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def draw_ellipse(self, center, radius, color):
         painter = QPainter(self.pixmap)
-        painter.setPen(QColor(color))
-        painter.drawEllipse(center[0] - radius[0], center[1] - radius[1], radius[0] * 2, radius[1] * 2)
+        painter.setPen(QColor(color))   
+        painter.drawEllipse(round(center[0] - radius[0]), round(center[1] - radius[1]), round(radius[0] * 2), round(radius[1] * 2))
         painter.end()
 
     def draw_point(self, point, color):
         painter = QPainter(self.pixmap)
         painter.setPen(QColor(color))
-        painter.drawPoint(point[0], point[1])
+        painter.drawPoint(round(point[0]), round(point[1]))
         painter.end()
 
     def draw_ellipse_canonical(self, center, radius, color, timer):
@@ -267,6 +293,23 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 self.draw_point(point, color)
 
     def time_analyse(self):
+        msgBox = QMessageBox()
+        msgBox.setText("Выберите фигуру для анализа по времени:")
+        msgBox.setWindowTitle("Анализ")
+
+        ok_button = QPushButton('Окружность', msgBox)
+        ellipse_button = QPushButton('Эллипс', msgBox)
+
+        msgBox.addButton(ok_button, QMessageBox.AcceptRole)
+        msgBox.addButton(ellipse_button, QMessageBox.RejectRole)
+
+        result = msgBox.exec_()
+        if result == QMessageBox.AcceptRole:
+            self.time_analyse_circle()
+        elif result == QMessageBox.RejectRole:
+            self.time_analyse_ellipse()
+    
+    def time_analyse_circle(self):
         last_index = self.comboBox_alg.currentIndex()
 
         sizes = [1]
@@ -274,7 +317,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             sizes.append(i)
 
         time_alg = []
-        for method in range(5):
+        for method in range(4):
             self.comboBox_alg.setCurrentIndex(method + 1)
             time_size = [] * 9
             for size in sizes:
@@ -292,8 +335,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         plt.figure(figsize=(14, 5))
         plt.title("Анализ времени для различных алгоритмов пострения окружности\nКоличество итераций: 5\n")
-        plt.ylabel("time(ns)")
-        plt.xlabel("radius")
+        plt.ylabel("время(ns)")
+        plt.xlabel("радиус")
         plt.plot(sizes, time_alg[0], label="канонич. ур-е")
         plt.plot(sizes, time_alg[1], linestyle = '--', label="парам. ур-е")
         plt.plot(sizes, time_alg[2], linestyle = '-.', label="алг-м средней точки")
@@ -301,11 +344,94 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         ticks = [1]
         for i in range(1000, 10001, 1000):
             ticks.append(i)
-        print(ticks)
         plt.xticks(ticks)
         plt.legend()
         plt.show()
-        
+
+    def time_analyse_ellipse(self):
+        self.time_analyse_ellipse_ry()
+        self.time_analyse_ellipse_rx()
+
+    def time_analyse_ellipse_ry(self):
+        last_index = self.comboBox_alg.currentIndex()
+        rx = 5
+        sizes = []
+        for i in range(1, 21):
+            new_size = [rx, (rx * rx)]
+            sizes.append(new_size)
+            rx += 5
+        time_alg = []
+        for method in range(4):
+            self.comboBox_alg.setCurrentIndex(method + 1)
+            time_size = []
+            for size in sizes:
+                average_time = 0
+                for count in range(5):
+                    time_start = time.time_ns()
+                    self.draw_figure([0, 0], [size[0], size[1]], None, True)
+                    time_end = time.time_ns()
+                    average_time += (time_end - time_start)
+                average_time /= 5
+                time_size.append(average_time)
+            time_alg.append(time_size.copy())
+        self.comboBox_alg.setCurrentIndex(last_index)
+
+        ticks_list = []
+        for i in range(20):
+            ticks_list.append(sizes[i][1] / sizes[i][0])
+
+        plt.figure(figsize=(14, 5))
+        plt.title("Анализ времени для различных алгоритмов пострения эллипса\nКоличество итераций: 5\n")
+        plt.ylabel("время(ns)")
+        plt.xlabel("отношение Ry / Rx")
+        plt.plot(ticks_list, time_alg[0], label="канонич. ур-е")
+        plt.plot(ticks_list, time_alg[1], linestyle = '--', label="парам. ур-е")
+        plt.plot(ticks_list, time_alg[2], linestyle = '-.', label="алг-м средней точки")
+        plt.plot(ticks_list, time_alg[3], linestyle = ':', label="алг-м Брезенхема")
+        plt.xticks(ticks_list)
+        plt.legend()
+        plt.show()
+
+    def time_analyse_ellipse_rx(self):
+        last_index = self.comboBox_alg.currentIndex()
+        rx = 5
+        sizes = []
+        for i in range(1, 21):
+            new_size = [rx, (rx * rx)]
+            sizes.append(new_size)
+            rx += 5
+        time_alg = []
+        for method in range(4):
+            self.comboBox_alg.setCurrentIndex(method + 1)
+            time_size = []
+            for size in sizes:
+                average_time = 0
+                for count in range(5):
+                    time_start = time.time_ns()
+                    self.draw_figure([0, 0], [size[1], size[0]], None, True)
+                    time_end = time.time_ns()
+                    average_time += (time_end - time_start)
+                average_time /= 5
+                time_size.append(average_time)
+            time_alg.append(time_size.copy())
+        self.comboBox_alg.setCurrentIndex(last_index)
+
+        ticks_list = []
+        for i in range(20):
+            ticks_list.append(sizes[i][1] / sizes[i][0])
+
+        plt.figure(figsize=(14, 5))
+        plt.title("Анализ времени для различных алгоритмов пострения эллипса\nКоличество итераций: 5\n")
+        plt.ylabel("время(ns)")
+        plt.xlabel("отношение Rx / Ry")
+        plt.plot(ticks_list, time_alg[0], label="канонич. ур-е")
+        plt.plot(ticks_list, time_alg[1], linestyle = '--', label="парам. ур-е")
+        plt.plot(ticks_list, time_alg[2], linestyle = '-.', label="алг-м средней точки")
+        plt.plot(ticks_list, time_alg[3], linestyle = ':', label="алг-м Брезенхема")
+        plt.xticks(ticks_list)
+        plt.legend()
+        plt.show()
+
     def show_info(self):
         self.sub_window = Info()
         self.sub_window.show()
@@ -336,39 +462,93 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         color = tuple(QColor.getRgb(color))
         self.label_color.setStyleSheet("background-color: rgba{:};".format(str(color)))
 
+    def scale_plus(self):
+        sub_scale = self.scale * 1.1
+        if sub_scale >= 200:
+            ErrorInput("Достигнут максимальный масштаб.")
+        else:
+            self.scale = sub_scale
+            self.graphicsView.scale(1.1, 1.1)
+
+    def scale_minus(self):
+        sub_scale = self.scale * 0.9
+        if sub_scale <= 0.3:
+            ErrorInput("Достигнут минимальный масштаб.")
+        else:
+            self.scale = sub_scale
+            self.graphicsView.scale(0.9, 0.9)
+        
     def keyPressEvent(self, event):
-        if event.key() == Qt.Key_Plus or event.key() == Qt.Key_Equal:
-            sub_scale = self.scale * 1.1
-            if sub_scale >= 200:
-                ErrorInput("Достигнут максимальный масштаб.")
-            else:
-                self.scale = sub_scale
-                self.graphicsView.scale(1.1, 1.1)
-            
+        if event.key() == Qt.Key_0:
+            self.graphicsView.resetTransform()
+        elif event.key() == Qt.Key_Plus or event.key() == Qt.Key_Equal:
+            self.scale_plus()
         elif event.key() == Qt.Key_Minus:
-            sub_scale = self.scale * 0.9
-            if sub_scale <= 0.3:
-                ErrorInput("Достигнут минимальный масштаб.")
-            else:
-                self.scale = sub_scale
-                self.graphicsView.scale(0.9, 0.9)
+            self.scale_minus()
+        elif event.key() == Qt.Key_Escape:
+            buttonReply = QMessageBox.question(self, 'Завершение работы', \
+                                           "Вы хотите завершить программу?", \
+                                           QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+            if buttonReply == QMessageBox.Yes:
+                QtWidgets.QApplication.quit()
+        elif event.key() == Qt.Key_Q:
+            self.clear_canvas()
+        elif event.key() == Qt.Key_B:
+            self.undo()
+        elif event.key() == Qt.Key_C:
+            self.set_color()
+        elif event.key() == Qt.Key_V:
+            currentIndex = self.comboBox_color.currentIndex()
+            count = self.comboBox_color.count()
+            nextIndex = (currentIndex + 1) % count
+            self.comboBox_color.setCurrentIndex(nextIndex)
+        elif event.key() == Qt.Key_A:
+            currentIndex = self.comboBox_alg.currentIndex()
+            count = self.comboBox_alg.count()
+            nextIndex = (currentIndex + 1) % count
+            self.comboBox_alg.setCurrentIndex(nextIndex)
+        elif event.key() == Qt.Key_F:
+            self.build_figure()
+        elif event.key() == Qt.Key_S:
+            self.build_range()
+        elif event.key() == Qt.Key_S:
+            self.build_range()
+    
+    def showEvent(self, event):
+        self.scrollbar_refresh()
 
-    def mousePressEvent(self, event):
-        if self.canvas_init:
-            self.canvas_init = False
-            self.scrollbar_refresh()
-            return
+    def zoomWheelEvent(self, event):
+        if event.angleDelta().y() > 0:
+            self.scale_plus()
+        else:
+            self.scale_minus()
+
+    def pointSelectEvent(self, event):
+        print(event.button())
         if event.button() == Qt.LeftButton:
-            pos_window = event.pos()
-            x_value, y_value = pos_window.x(), pos_window.y()
-            if x_value < 413 or y_value < 13:
-                return
-            pos_scene = self.graphicsView.mapToScene(pos_window)
-            point = [pos_scene.x() - (413 + self.canvas_center[0]), 
-                     -(pos_scene.y() - (13 + self.canvas_center[1]))]
-
+            pos_scene = self.graphicsView.mapToScene(event.pos())
+            point = [pos_scene.x() - (self.canvas_center[0]), 
+                     -(pos_scene.y() - (self.canvas_center[1]))]
             self.doubleSpinBox_xc.setValue(float(point[0]))
             self.doubleSpinBox_yc.setValue(float(point[1]))
+        elif event.button() == Qt.RightButton or event.button() == Qt.MiddleButton:
+            self._last_mouse_pos = self.graphicsView.mapToScene(event.pos())
+            
+    def canvasMoveEvent(self, event):
+        if event.buttons() == Qt.RightButton or event.buttons() == Qt.MiddleButton:
+            pos_scene = self.graphicsView.mapToScene(event.pos())
+
+            x_diff = int((pos_scene.x() - self._last_mouse_pos.x()) * self.scale)
+            y_diff = int((pos_scene.y() - self._last_mouse_pos.y()) * self.scale)
+
+            x_val = self.graphicsView.horizontalScrollBar().value()
+            y_val = self.graphicsView.verticalScrollBar().value()
+            
+            self.graphicsView.horizontalScrollBar().setValue(x_val - x_diff)
+            self.graphicsView.verticalScrollBar().setValue(y_val - y_diff)
+
+            self._last_mouse_pos =  self.graphicsView.mapToScene(event.pos())
+        super().mouseMoveEvent(event)
 
     def closeEvent(self, event):
         buttonReply = QMessageBox.question(self, 'Завершение работы', 
