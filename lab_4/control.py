@@ -481,6 +481,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_0:
             self.graphicsView.resetTransform()
+            self.scale = 1
         elif event.key() == Qt.Key_Plus or event.key() == Qt.Key_Equal:
             self.scale_plus()
         elif event.key() == Qt.Key_Minus:
