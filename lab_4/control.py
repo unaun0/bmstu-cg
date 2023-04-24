@@ -1,8 +1,7 @@
-from PyQt5 import QtWidgets, QtCore, QtGui
+from PyQt5 import QtWidgets, QtGui
 from PyQt5.QtGui import QColor, QPen, QPixmap, QPainter
-from PyQt5.QtWidgets import QWidget, QMainWindow, QMessageBox, QColorDialog, QPushButton
-from PyQt5.QtWidgets import QGraphicsEllipseItem, QGraphicsPixmapItem, QGraphicsScene
-from PyQt5.QtCore import Qt, QRect, pyqtSignal
+from PyQt5.QtWidgets import QWidget, QMainWindow, QMessageBox, QColorDialog, QPushButton, QDialog
+from PyQt5.QtCore import Qt
 
 from main_window import Ui_MainWindow
 from task_popup import Ui_TaskPopup
@@ -444,13 +443,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.doubleSpinBox_ry.setEnabled(True)
 
     def set_color(self):
-        self.update_stack()
-        color = QColorDialog.getColor()
-        action = self.comboBox_color.currentIndex()
-        if action:
-            self.set_pen_color(color)
-        else:
-            self.set_bg_color(color)
+        color_dialog = QColorDialog()
+        if color_dialog.exec_() == QDialog.Accepted:
+            color = color_dialog.selectedColor()
+            action = self.comboBox_color.currentIndex()
+            self.update_stack()
+            if action:
+                self.set_pen_color(color)
+            else:
+                self.set_bg_color(color)
  
     def set_bg_color(self, color):
         self.bg_color = color
@@ -481,7 +482,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def keyPressEvent(self, event):
         if event.key() == Qt.Key_0:
             self.graphicsView.resetTransform()
-            self.scale = 1
         elif event.key() == Qt.Key_Plus or event.key() == Qt.Key_Equal:
             self.scale_plus()
         elif event.key() == Qt.Key_Minus:
@@ -525,7 +525,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.scale_minus()
 
     def pointSelectEvent(self, event):
-        print(event.button())
         if event.button() == Qt.LeftButton:
             pos_scene = self.graphicsView.mapToScene(event.pos())
             point = [pos_scene.x() - (self.canvas_center[0]), 
