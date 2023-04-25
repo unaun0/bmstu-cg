@@ -31,6 +31,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.pushButton_color.clicked.connect(self.set_color)  # set new color
         self.pushButton_clear.clicked.connect(self.clear_canvas) # clean
         self.pushButton_back.clicked.connect(self.undo) # back
+        self.pushButton_fadd_point.clicked.connect(self.add_point) # add point
 
     def set_value(self):
         pass
@@ -62,10 +63,29 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.graphicsView.wheelEvent = self.zoomWheelEvent
         self.update_stack()
     
+    def init_color_settings(self):
+        self.bg_color = QColor(255, 255, 255)
+        self.border_color = QColor(0, 0, 0)
+        self.edge_color = QColor(255, 0, 0)
+        self.fill_color = QColor(0, 0, 0)
+    
     def scrollbar_refresh(self):
         self.graphicsView.horizontalScrollBar().setValue(int(self.canvas_center[0] - (self.view_size[0] // 2)))
         self.graphicsView.verticalScrollBar().setValue(int(self.canvas_center[1] - (self.view_size[1] // 2)))
 
+    def push_point_in_table(self, point):
+        last_index_row = self.tableWidget_points.rowCount()
+        self.tableWidget_points.insertRow(last_index_row)
+        self.tableWidget_points.setItem(last_index_row, 0, QtWidgets.QTableWidgetItem("{:10.6f}".format(point[0])))
+        self.tableWidget_points.setItem(last_index_row, 1, QtWidgets.QTableWidgetItem("{:10.6f}".format(point[1])))
+
+    def add_point(self):
+        point = (float(self.spinBox_fx.value()), float(self.spinBox_fy.value()))
+        self.push_point_in_table(point)
+
+    def draw_line(self, point_a, point_b):
+        pass
+    
     def update_scene(self):
         self.scene.addPixmap(self.pixmap)
         self.graphicsView.show()
@@ -98,24 +118,31 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.canvas_center = (self.canvas_size[0] / 2, self.canvas_size[1] / 2)
 
         self.scene.clear()
-
         self.update_stack()
 
         self.pixmap = QPixmap(5002, 5002)
         self.pixmap.fill(Qt.transparent)
-        
+
         self.scene.addPixmap(self.pixmap)
         self.graphicsView.resetTransform()
 
-        self.bg_color = QColor(255, 255, 255)
-        self.pen_color = QColor(0, 0, 0)
         self.scale = 1
+
+        self.set_start_color()
 
         self.set_bg_color(self.bg_color)
         self.set_pen_color(self.pen_color)
 
         self.set_value()
         self.scrollbar_refresh()
+
+    def set_start_color(self):
+        self.init_color_settings()
+
+        self.set_bg_color(self.bg_color)
+        self.set_border_color(self.pen_color)
+        self.set_edge_color(self.pen_color)
+        self.set_fill_color(self.pen_color)
 
     def show_info(self):
         self.sub_window = Info()
@@ -133,28 +160,39 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.tab_index = self.tabWidget_time.currentIndex()
 
     def set_color(self):
-        pass
-        '''
         color_dialog = QColorDialog()
         if color_dialog.exec_() == QDialog.Accepted:
             color = color_dialog.selectedColor()
             action = self.comboBox_color.currentIndex()
             self.update_stack()
-            if action:
-                self.set_pen_color(color)
-            else:
+            if action == 0:
                 self.set_bg_color(color)
-        '''
+            elif action == 1:
+                self.set_border_color(color)
+            elif action == 2:
+                self.set_fill_color(color)
+            elif action == 3:
+                self.set_edge_color(color)
  
     def set_bg_color(self, color):
         self.bg_color = color
         brush = QtGui.QBrush(QtGui.QColor(color))
         self.graphicsView.setBackgroundBrush(brush)
 
-    def set_pen_color(self, color):
+    def set_border_color(self, color):
         self.pen_color = color
         color = tuple(QColor.getRgb(color))
-        self.label_color.setStyleSheet("background-color: rgba{:};".format(str(color)))
+        self.label_bcolor.setStyleSheet("background-color: rgba{:};".format(str(color)))
+    
+    def set_fill_color(self, color):
+        self.pen_color = color
+        color = tuple(QColor.getRgb(color))
+        self.label_fcolor.setStyleSheet("background-color: rgba{:};".format(str(color)))
+    
+    def set_edge_color(self, color):
+        self.pen_color = color
+        color = tuple(QColor.getRgb(color))
+        self.label_ecolor.setStyleSheet("background-color: rgba{:};".format(str(color)))
 
     def scale_plus(self):
         sub_scale = self.scale * 1.1
@@ -199,17 +237,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             count = self.comboBox_color.count()
             nextIndex = (currentIndex + 1) % count
             self.comboBox_color.setCurrentIndex(nextIndex)
-        elif event.key() == Qt.Key_A:
-            currentIndex = self.comboBox_alg.currentIndex()
-            count = self.comboBox_alg.count()
-            nextIndex = (currentIndex + 1) % count
-            self.comboBox_alg.setCurrentIndex(nextIndex)
-        elif event.key() == Qt.Key_F:
-            self.build_figure()
-        elif event.key() == Qt.Key_S:
-            self.build_range()
-        elif event.key() == Qt.Key_S:
-            self.build_range()
     
     def showEvent(self, event):
         self.set_options()
@@ -226,8 +253,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             pos_scene = self.graphicsView.mapToScene(event.pos())
             point = [pos_scene.x() - (self.canvas_center[0]), 
                      -(pos_scene.y() - (self.canvas_center[1]))]
-            self.doubleSpinBox_xc.setValue(float(point[0]))
-            self.doubleSpinBox_yc.setValue(float(point[1]))
+            self.push_point_in_table(point)
         elif event.button() == Qt.RightButton or event.button() == Qt.MiddleButton:
             self._last_mouse_pos = self.graphicsView.mapToScene(event.pos())
             
