@@ -1,7 +1,7 @@
-from PyQt5 import QtWidgets, QtGui
+from PyQt5 import QtWidgets, QtGui, QtTest
 from PyQt5.QtGui import QColor, QPen, QPixmap, QPainter
 from PyQt5.QtWidgets import QWidget, QMainWindow, QMessageBox, QColorDialog, QPushButton, QDialog
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QObject, QThread, pyqtSignal
 
 from main_window import Ui_MainWindow
 from task_popup import Ui_TaskPopup
@@ -14,7 +14,7 @@ from math import ceil, floor
 class Poligon():
     sindex = 0
     eindex = 0
-    edges = [] 
+    edges = []
     fill = True
 
 class Figure():
@@ -41,8 +41,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def bindButtons(self):
         self.pushButton_color.clicked.connect(self.set_color)  # set new color
-        #self.pushButton_clear.clicked.connect(self.clear_canvas) # clean
-        #self.pushButton_back.clicked.connect(self.undo) # back
+        self.pushButton_clear.clicked.connect(self.clear_canvas) # clear
+        self.pushButton_back.clicked.connect(self.undo) # back
         self.pushButton_fadd_point.clicked.connect(self.add_point) # add point
         self.pushButton_ffill.clicked.connect(self.fill_poligon) # close figure
         self.pushButton_fclose.clicked.connect(self.close_figure) # fill figure
@@ -50,6 +50,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def init_stack(self):
         self.state_stack = []
         self.stack_size = 10
+        self.points = []
 
     def init_canvas(self):
         self.scene = QtWidgets.QGraphicsScene(self)
@@ -71,7 +72,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.graphicsView.wheelEvent = self.zoomWheelEvent
 
         self.init_color_settings()
-        #self.update_stack()
+        self.update_stack()
     
     def init_color_settings(self):
         self.bg_color = QColor(255, 255, 255)
@@ -81,11 +82,15 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.graphicsView.horizontalScrollBar().setValue(int(self.canvas_center[0] - (self.view_size[0] // 2)))
         self.graphicsView.verticalScrollBar().setValue(int(self.canvas_center[1] - (self.view_size[1] // 2)))
 
-    def push_point_in_table(self, point): 
+    def update_table(self, point):
         last_index_row = self.tableWidget_points.rowCount()
         self.tableWidget_points.insertRow(last_index_row)
         self.tableWidget_points.setItem(last_index_row, 0, QtWidgets.QTableWidgetItem("{:10}".format(point[0])))
         self.tableWidget_points.setItem(last_index_row, 1, QtWidgets.QTableWidgetItem("{:10}".format(point[1])))
+
+    def push_point_in_table(self, point): 
+        self.points.append(point)
+        self.update_table(point)
 
     def fill_table(self):
         color = self.fill_color
@@ -118,6 +123,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             if point_pres == point_prev:
                 ErrorInput("Длина ребра фигуры должна быть больше нуля.")
                 self.tableWidget_points.removeRow(last_index_row)
+                self.points = self.points[:-1]
                 return
             elif Figure.count_point > 2:
                 start_prev_edge = (float(self.tableWidget_points.item(last_index_row - 2 , 0).text()), \
@@ -125,15 +131,18 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 if start_prev_edge == point_pres:
                     ErrorInput("Ребра фигуры не должны повторяться.")
                     self.tableWidget_points.removeRow(last_index_row)
+                    self.points = self.points[:-1]
                     return
             self.draw_line(point_prev, point_pres, self.fill_color)
     
     def add_point(self):
+        self.update_stack()
         point = (int(self.spinBox_fx.value()), int(self.spinBox_fy.value()))
         self.push_point_in_table(point)
         self.draw_edge()
 
     def close_figure(self):
+        self.update_stack()
         Figure.eindex = self.tableWidget_points.rowCount() - 1
         count = Figure.eindex - Figure.sindex
         if count < 2:
@@ -151,6 +160,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         Figure.closed = True
         
     def fill_poligon(self):
+        self.update_stack()
         if not Figure.closed:
             ErrorInput("Необходимо замкнуть фигуру.")
             return
@@ -168,9 +178,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 time_flag = True
 
         start = time.time_ns()
+
         lines, ranges = self.make_lines(Poligon.edges)
         self.fill_lines(lines, ranges, self.fill_color, pause)
+
         end = time.time_ns()
+
         if time_flag:
             result = (end - start) * 0.000001
             self.label_time_action.setText(str(round(result, 6)))
@@ -200,7 +213,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         return sorted_edges
 
     def make_lines(self, edges):
-
         min_y = min([min(edge[1], edge[3]) for edge in edges])
         max_y = max([max(edge[1], edge[3]) for edge in edges])
         min_x = min([min(edge[0], edge[2]) for edge in edges])
@@ -220,7 +232,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             lines.append([y, intersections.copy()])
         
         return lines, (min_y, max_y, min_x, max_x)
-    
+
     def fill_lines(self, lines, ranges, color, pause):
         min_y, max_y, min_x, max_x = ranges
         for i in range(0, len(lines)):
@@ -232,9 +244,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
                 for x in range(x1, x2 + 1):
                     self._draw_point((x + self.canvas_center[0], self.canvas_center[1] - y), color)
                 if pause > 0:
-                    time.sleep(pause // 1000)
-                    print("hello")
                     self.update_scene()
+                    QtTest.QTest.qWait(pause)
         self.update_scene()
     
     def draw_line(self, point_a, point_b, color):
@@ -256,14 +267,19 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         painter.end()
     
     def update_scene(self):
+        self.scene.clear()
         self.scene.addPixmap(self.pixmap)
-        self.graphicsView.show()
+        self.scene.update()
     
     def update_stack(self):
         pixmap_copy = self.pixmap.copy()
-        #self.state_stack.append([pixmap_copy.copy(), self.bg_color, self.pen_color])
+        self.state_stack.append([self.points.copy(), 
+                                 pixmap_copy.copy(), 
+                                 [Poligon.sindex, Poligon.eindex, Poligon.edges, Poligon.fill],
+                                 [Figure.sindex, Figure.eindex, Figure.count_point, Figure.closed],
+                                 self.bg_color, 
+                                 self.fill_color])
         if len(self.state_stack) > self.stack_size:
-            self.state_stack[0] = None
             self.state_stack.pop(0)
 
     def undo(self):
@@ -271,15 +287,30 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if index < 0:
             ErrorInput("Невозможно отменить действие.")
         else:
-            self.pixmap = None
+            self.points = (self.state_stack[index][0]).copy()
+            self.tableWidget_points.setRowCount(0)
+            for point in  self.points:
+                self.update_table(point)
+            self.pixmap = self.state_stack[index][1]
+            self.set_bg_color(self.state_stack[index][4])
+            self.set_fill_color(self.state_stack[index][5])
 
-            self.pixmap = self.state_stack[index][0]
-            self.set_bg_color(self.state_stack[index][1])
-            self.set_pen_color(self.state_stack[index][2])
+            poligon = self.state_stack[index][2]
+
+            Poligon.sindex = poligon[0]
+            Poligon.eindex = poligon[1]
+            Poligon.edges = poligon[2].copy()
+            Poligon.fill = poligon[3]
+
+            figure = self.state_stack[index][3]
+
+            Figure.sindex = figure[0]
+            Figure.eindex = figure[1]
+            Figure.count_point = figure[2]
+            Figure.closed = figure[3]
 
             self.state_stack.pop(index)
-            self.scene.clear()
-            self.scene.addPixmap(self.pixmap)
+            self.update_scene()
 
     def clear_canvas(self):
         self.canvas_size = (5002, 5002)
@@ -295,23 +326,31 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.scene.addPixmap(self.pixmap)
         self.graphicsView.resetTransform()
 
+        self.tableWidget_points.clearContents()
+        self.tableWidget_points.setRowCount(0)
+        
+        self.points.clear()
+
         self.scale = 1
+
+        Poligon.sindex = 0
+        Poligon.eindex = 0
+        Poligon.edges = []
+        Poligon.fill = True
+
+        Figure.sindex = 0
+        Figure.eindex = 0
+        Figure.count_point = 0
+        Figure.closed = True
 
         self.set_start_color()
 
-        self.set_bg_color(self.bg_color)
-        self.set_pen_color(self.pen_color)
-
-        self.set_value()
         self.scrollbar_refresh()
 
     def set_start_color(self):
         self.init_color_settings()
-
         self.set_bg_color(self.bg_color)
-        self.set_border_color(self.pen_color)
-        self.set_edge_color(self.pen_color)
-        self.set_fill_color(self.pen_color)
+        self.set_fill_color(self.fill_color)
 
     def show_info(self):
         self.sub_window = Info()
@@ -333,13 +372,14 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if color_dialog.exec_() == QDialog.Accepted:
             color = color_dialog.selectedColor()
             action = self.comboBox_color.currentIndex()
-            self.update_stack()
             if action == 0:
+                self.update_stack()
                 self.set_bg_color(color)
             elif action == 1:
                 if not Poligon.fill:
                     ErrorInput("Невозможно изменить цвет области в процессе её создания.")
                     return
+                self.update_stack()
                 self.set_fill_color(color)
  
     def set_bg_color(self, color):
@@ -351,6 +391,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def set_fill_color(self, color):
         self.fill_color = color
+        Poligon.color = color
         color = tuple(QColor.getRgb(color))
         self.label_fcolor.setStyleSheet("background-color: rgba{:};".format(str(color)))
 
@@ -389,7 +430,10 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         elif event.key() == Qt.Key_Q:
             self.clear_canvas()
         elif event.key() == Qt.Key_B:
-            self.undo()
+            #self.undo()
+            for log in self.state_stack:
+                print(log, '\n')
+            print('---------------------------------------------------')
         elif event.key() == Qt.Key_C:
             self.set_color()
         elif event.key() == Qt.Key_V:
@@ -410,6 +454,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def pointSelectEvent(self, event):
         if event.button() == Qt.LeftButton:
+            self.update_stack()
             pos_scene = self.graphicsView.mapToScene(event.pos())
             point = [round(pos_scene.x() - (self.canvas_center[0])), 
                      -round(pos_scene.y() - (self.canvas_center[1]))]
