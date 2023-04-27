@@ -180,22 +180,14 @@ class Ui_TaskPopup(object):
     def retranslateUi(self, TaskPopup):
         _translate = QtCore.QCoreApplication.translate
         TaskPopup.setWindowTitle(_translate("TaskPopup", "Информация"))
-        self.taskPopup.setHtml(_translate("TaskPopup", '''<!DOCTYPE html><html><head><meta charset="utf-8"><title>Информация о программе
-Название: Построение фигур
-Автор: Цховребова Яна Роландовна
-Группа: ИУ7-44Б
-#### Условие задачи
-Дано множество точек. Из этих точек как из центров начинают одновременно и с одинаковой скоростью ―расти‖ круги (т.е. точки являются центрами, а радиусы увеличиваются с одинаковой скоростью). Если два круга сталкиваются, то их рост прекращается. Определить радиусы всех получившихся кругов после того как их рост прекратится.
-###### Добавление точки:
-* Кнопка: Добавить
-* Нарисовать на.md</title><style></style></head><body id="preview">
+        self.taskPopup.setHtml(_translate("TaskPopup", '''<!DOCTYPE html><html><head><meta charset="utf-8"><title></title><style></style></head><body id="preview">
 <h1 class="code-line" data-line-start=0 data-line-end=1><a id="___0"></a>Информация о программе</h1>
-<p class="has-line-data" data-line-start="2" data-line-end="3">Название: Алгоритмы построения окружностей</p>
+<p class="has-line-data" data-line-start="2" data-line-end="3">Название: Заполнение сплошных областей</p>
 <p class="has-line-data" data-line-start="4" data-line-end="5">Автор: Цховребова Яна Роландовна</p>
 <p class="has-line-data" data-line-start="6" data-line-end="7">Группа: ИУ7-44Б</p>
 <h3 class="code-line" data-line-start=8 data-line-end=9><a id="__8"></a>Условие задачи</h3>
-<p class="has-line-data" data-line-start="10" data-line-end="11">Реализовать возможность построения окружностей / эллипсов различными методами (библиотечным, Брезенхема, канонического и параметрического уравнений, средней точки) и анализ по времени.</p>
-</ul>
+<p class="has-line-data" data-line-start="10" data-line-end="11">Реализация и исследование алгоритма растрового заполнения по ребрам сплошной области.</p>
+</u>
 </body></html>
 '''))
 
