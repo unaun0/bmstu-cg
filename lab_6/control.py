@@ -115,6 +115,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             if Poligon.fill:
                 Poligon.fill = False
                 Poligon.sindex = last_index_row
+                self.pixmap.fill(Qt.white)
             Figure.closed = False
             Figure.sindex = last_index_row
             Figure.count_point = 1
@@ -192,7 +193,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         start = time.time_ns()
 
-        self.fill_lines(Poligon.edges, SeedPoint.point, self.fill_color, pause)
+        self.fill_lines(SeedPoint.point, self.fill_color, pause)
     
         end = time.time_ns()
 
@@ -233,40 +234,73 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         point = (round(point[0] + self.canvas_center[0]), round(self.canvas_center[1] - point[1]))
         pixel_color = QColor(self.pixmap.toImage().pixel(point[0], point[1]))
         if pixel_color == self.edge_color:
-            return False
-        return True
+            return True
+        return False
+
+    def is_bg(self, point):
+        point = (round(point[0] + self.canvas_center[0]), round(self.canvas_center[1] - point[1]))
+        pixel_color = QColor(self.pixmap.toImage().pixel(point[0], point[1]))
+        if pixel_color == self.bg_color:
+            return True
+        return False
+    
+    def is_fill(self, point):
+        point = (round(point[0] + self.canvas_center[0]), round(self.canvas_center[1] - point[1]))
+        pixel_color = QColor(self.pixmap.toImage().pixel(point[0], point[1]))
+        if pixel_color == self.fill_color:
+            return True
+        return False
         
-    def fill_lines(self, edges, seedpoint, color, pause):
+    def fill_lines(self, seedpoint, color, pause):
         stack = []
         stack.append(seedpoint)
-        filled = []
-
         while len(stack) > 0:
             x, y = stack.pop()
+
             self._draw_point((x + self.canvas_center[0], 
                               self.canvas_center[1] - y), 
                               color)
-            tx = x
-            x -= 1
-            while self.is_edge((x, y)):
-                self._draw_point((x + self.canvas_center[0], 
-                              self.canvas_center[1] - y), 
-                              color)
-                x -= 1
-            left_x = x + 1
-
-            x = tx
-            x += 1
-            while self.is_edge((x, y)):
-                self._draw_point((x + self.canvas_center[0], 
-                              self.canvas_center[1] - y), 
-                              color)
-                x += 1
-            right_x = x + 1
             
+            tmp_x = x
+            tmp_y = y
+
+            x += 1
+            while (self.is_edge((x, y)) == False) and (self.is_fill((x, y)) == False):
+                self._draw_point((x + self.canvas_center[0], 
+                                  self.canvas_center[1] - y), 
+                                  color)
+                x += 1
+            x_right = x - 1
+
+            x = tmp_x - 1
+            while (self.is_edge((x, y)) == False) and (self.is_fill((x, y)) == False):
+                self._draw_point((x + self.canvas_center[0], 
+                                  self.canvas_center[1] - y), 
+                                  color)
+                x -= 1
+            x_left = x + 1
+
+            for cur_y in [y + 1, y - 1]:
+                x = x_left
+                while x <= x_right:
+                    flag = False
+                    while (self.is_edge((x, cur_y)) == False) and (self.is_fill((x, cur_y)) == False) and (x <= x_right):
+                        flag = True
+                        x += 1
+                    if flag == True:
+                        if (x == x_right) and (self.is_edge((x, cur_y)) == False) and (not self.is_fill((x, cur_y)) == False):
+                            stack.append((x, cur_y))
+                        else:
+                            stack.append((x - 1, cur_y))
+                        flag = False
+                    x_cur = x
+                    while (self.is_edge((x, cur_y)) == True or self.is_fill((x, cur_y)) == True) and (x < x_right):
+                        x += 1
+                    if x == x_cur:
+                        x += 1
             if pause > 0:
-                self.update_scene()
                 QtTest.QTest.qWait(pause)
+                self.update_scene()
         self.update_scene()
     
     def draw_line(self, point_a, point_b, color):
