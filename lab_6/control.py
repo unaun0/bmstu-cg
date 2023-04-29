@@ -246,14 +246,24 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self._draw_point((x + self.canvas_center[0], 
                               self.canvas_center[1] - y), 
                               color)
-            if (x, y + 1) not in filled and self.is_edge((x, y + 1)):
-                stack.append((x, y + 1))
-            if (x, y - 1) not in filled and self.is_edge((x, y - 1)):
-                stack.append((x, y - 1))
-            if (x + 1, y) not in filled and self.is_edge((x + 1, y)):
-                stack.append((x + 1, y))
-            if (x - 1, y) not in filled and self.is_edge((x - 1, y)):
-                stack.append((x - 1, y))
+            tx = x
+            x -= 1
+            while self.is_edge((x, y)):
+                self._draw_point((x + self.canvas_center[0], 
+                              self.canvas_center[1] - y), 
+                              color)
+                x -= 1
+            left_x = x + 1
+
+            x = tx
+            x += 1
+            while self.is_edge((x, y)):
+                self._draw_point((x + self.canvas_center[0], 
+                              self.canvas_center[1] - y), 
+                              color)
+                x += 1
+            right_x = x + 1
+            
             if pause > 0:
                 self.update_scene()
                 QtTest.QTest.qWait(pause)
