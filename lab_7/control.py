@@ -6,6 +6,7 @@ from PyQt5.QtCore import Qt
 from main_window import Ui_MainWindow
 from task_popup import Ui_TaskPopup
 from errors import ErrorInput
+from clipper import cohenSutherlandClipper
 
 from math import ceil, floor
 
@@ -14,11 +15,13 @@ class Line:
     epoint = None
     _list = []
     proc = False
+    _res_list = []
 
 class Clip:
     spoint = None
     epoint = None
     proc = False
+    item = None
 
 class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def __init__(self): 
@@ -31,29 +34,28 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.bindButtons()
 
     def bindActions(self):
-        self.radioButton_clip.toggled.connect(self.draw_mode_change_clip)
-        self.radioButton_line.toggled.connect(self.draw_mode_change_line)
+        self.radioButton_clip.toggled.connect(self.draw_mode_change_clip) # change mode
+        self.radioButton_line.toggled.connect(self.draw_mode_change_line) # change mode
         self.actionExit.triggered.connect(self.closeEvent) # close app
         self.actionAuthors.triggered.connect(self.show_info) #  info about app
 
     def bindButtons(self):
-        self.pushButton_ladd.clicked.connect(self.action_add_line)
-        self.pushButton_oadd.clicked.connect(self.action_add_clip)
+        self.pushButton_ladd.clicked.connect(self.action_add_line) # add line
+        self.pushButton_oadd.clicked.connect(self.action_add_clip) # add clipper
         self.pushButton_color.clicked.connect(self.set_color)  # set new color
         self.pushButton_clear.clicked.connect(self.canvas_clear) # clear
         self.pushButton_back.clicked.connect(self.undo) # back
+        self.pushButton_3.clicked.connect(self.clipper_line) # clip line
 
     def stack_init(self):
         self.state_stack = []
-        self.stack_size = 10
+        self.stack_size = 20
     
     def stack_update(self):
         pixmap_copy = self.pixmap.copy()
-        pixmap_sub_copy = self.pixmap_sub.copy()
         self.state_stack.append([pixmap_copy.copy(),
-                                 pixmap_sub_copy.copy(),
-                                 [Line.spoint, Line.epoint, Line._list.copy(), Line.proc],
-                                 [Clip.spoint, Clip.epoint, Clip.proc],
+                                 [Line.spoint, Line.epoint, Line._list.copy(), Line.proc, Line._res_list.copy()],
+                                 [Clip.spoint, Clip.epoint, Clip.proc, Clip.item],
                                  self.bg_color,
                                  self.line_color, 
                                  self.clip_color,
@@ -66,39 +68,53 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         if index < 0:
             ErrorInput("Невозможно отменить действие.")
         else:
-            self.pixmap = self.state_stack[index][0]
-            self.pixmap_sub = self.state_stack[index][1]
+            self.scene.clear()
 
-            line_data = self.state_stack[index][2]
+            self.dashline_init()
+            self.dashrect_rect()
+
+            self.pixmap = self.state_stack[index][0]
+            self.scene.addPixmap(self.pixmap)
+
+            self.bg_color = self.state_stack[index][3]
+            self.line_color = self.state_stack[index][4]
+            self.clip_color = self.state_stack[index][5]
+            self.result_color = self.state_stack[index][6]
+
+            self.color_start_set()
+            line_data = self.state_stack[index][1]
 
             Line.spoint = line_data[0]
             Line.epoint = line_data[1]
             Line._list = line_data[2].copy()
             Line.proc = line_data[3]
+            Line._res_list = line_data[4].copy()
 
             self.tableWidget_points.clearContents()
             self.tableWidget_points.setRowCount(0)
             for line in Line._list:
-                self.table_push_line(line[0], line[1])
+                self.table_push_line((line[0], line[1]), (line[2], line[3]))
+                self.draw_line((line[0], line[1]), (line[2], line[3]), self.line_color)
+            if len(Line._res_list) > 0:
+                for line in Line._res_list:
+                    self.scene.addItem(line)
 
-            clip_data = self.state_stack[index][3]
+            clip_data = self.state_stack[index][2]
 
             Clip.spoint = clip_data[0]
             Clip.epoint = clip_data[1]
             Clip.proc = clip_data[2]
+            Clip.item = clip_data[3]
 
-            if Clip.spoint != None and Clip.epoint != None:
-                self.clip_push(Clip.spoint, Clip.epoint)
+            if Clip.item != None:
+                if Clip.spoint != None and Clip.epoint != None:
+                    self.clip_push(Clip.spoint, Clip.epoint)
+                    try:
+                        self.scene.addItem(Clip.item)
+                    except:
+                        ErrorInput("Не удалось отменить действие.")
             else:
                 self.clip_push(("", ""), ("", ""))
-
-            self.bg_color = self.state_stack[index][4]
-            self.line_color = self.state_stack[index][5]
-            self.clip_color = self.state_stack[index][6]
-            self.result_color = self.state_stack[index][7]
-
-            self.color_start_set()
-
             self.state_stack.pop(index)
             self.canvas_update()
 
@@ -113,20 +129,17 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         self.pixmap = QPixmap(5002, 5002)
         self.pixmap.fill(Qt.transparent)
-
-        self.pixmap_sub = QPixmap(5002, 5002)
-        self.pixmap_sub.fill(Qt.transparent)
-
         self.scene.addPixmap(self.pixmap)
-        self.scene.addPixmap(self.pixmap_sub)
 
         self.scale = 1
 
         self.graphicsView.mousePressEvent = self.pointSelectEvent
         self.graphicsView.mouseMoveEvent = self.canvasMoveEvent
         self.graphicsView.wheelEvent = self.zoomWheelEvent
+        self.graphicsView.mouseReleaseEvent = self.canvasReleaseEvent
 
-        self.isRubberBandOn = False
+        self.dashline_init()
+        self.dashrect_rect()
 
         self.stack_update()
     
@@ -135,9 +148,6 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.graphicsView.verticalScrollBar().setValue(int(self.canvas_center[1] - (self.view_size[1] // 2)))
 
     def canvas_update(self):
-        self.scene.clear()
-        self.scene.addPixmap(self.pixmap)
-        self.scene.addPixmap(self.pixmap_sub)
         self.scene.update()
 
     def canvas_clear(self):
@@ -151,13 +161,11 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         self.pixmap = QPixmap(5002, 5002)
         self.pixmap.fill(Qt.transparent)
-
-        self.pixmap_sub = QPixmap(5002, 5002)
-        self.pixmap_sub.fill(Qt.transparent)
-
         self.scene.addPixmap(self.pixmap)
-        self.scene.addPixmap(self.pixmap_sub)
         self.graphicsView.resetTransform()
+
+        self.dashline_init()
+        self.dashrect_rect()
 
         self.canvas_update()
         self.canvas_scrollbar_refresh()
@@ -172,10 +180,12 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         Line.epoint = None
         Line._list = []
         Line.proc = False
+        Line._res_list = []
 
         Clip.spoint = None
         Clip.epoint = None
         Clip.proc = False
+        Clip.item = None
         
         self.color_init()
         self.color_start_set()
@@ -188,6 +198,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.tableWidget_points.setItem(last_index_row, 2, QtWidgets.QTableWidgetItem("{:10}".format(point_b[0])))
         self.tableWidget_points.setItem(last_index_row, 3, QtWidgets.QTableWidgetItem("{:10}".format(point_b[1])))
 
+        self.table_fill()
+
     def clip_push(self, point_a, point_b):
         self.lineEdit_xn.setText(str(point_a[0]))
         self.lineEdit_yn.setText(str(point_a[1]))
@@ -195,20 +207,21 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.lineEdit_yok.setText(str(point_b[1]))
 
     def table_fill(self):
-        pass
-        '''
-        color = self.fill_color
+        color = self.line_color
         old_alpha = color.alpha()
         color.setAlpha(120)
-        if Poligon.sindex:
-            last_color = self.tableWidget_points.item(Poligon.sindex - 1, 0).background().color()
+
+        last_index_row = self.tableWidget_points.rowCount() - 1
+        if last_index_row > 0:
+            last_color = self.tableWidget_points.item(last_index_row - 1, 0).background().color()
             if color == last_color:
-                color.setAlpha(100)
-        for i in range(Poligon.sindex, Poligon.eindex + 1):
-            self.tableWidget_points.item(i, 0).setBackground(QtGui.QBrush(QtGui.QColor(color)))
-            self.tableWidget_points.item(i, 1).setBackground(QtGui.QBrush(QtGui.QColor(color)))
+                color.setAlpha(90)
+        self.tableWidget_points.item(last_index_row, 0).setBackground(QtGui.QBrush(QtGui.QColor(color)))
+        self.tableWidget_points.item(last_index_row, 1).setBackground(QtGui.QBrush(QtGui.QColor(color)))
+        self.tableWidget_points.item(last_index_row, 2).setBackground(QtGui.QBrush(QtGui.QColor(color)))
+        self.tableWidget_points.item(last_index_row, 3).setBackground(QtGui.QBrush(QtGui.QColor(color)))
+        
         color.setAlpha(old_alpha)
-        '''
     
     def action_add_line(self):
         Line.proc = False
@@ -223,18 +236,21 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.add_clip()
     
     def clip_refresh(self):
-        self.pixmap_sub = QPixmap(5002, 5002)
-        self.pixmap_sub.fill(Qt.transparent)
-        self.scene.addPixmap(self.pixmap)
+        self.scene.removeItem(Clip.item)
+
+    def result_refresh(self):
+        for item in Line._res_list:
+            self.scene.removeItem(item)
+        Line._res_list = []
 
     def add_clip(self):
         if (abs(Clip.epoint[0] - Clip.spoint[0]) < 2) or (abs(Clip.epoint[1] - Clip.spoint[1]) < 2):
             ErrorInput("Площадь отсекателя должна быть больше нуля.")
         else:
             self.stack_update()
-            if Clip.spoint and Clip.epoint:
+            if Clip.spoint and Clip.epoint and Clip.item:
                 self.clip_refresh()
-            self.draw_clip(Clip.spoint, Clip.epoint, self.clip_color)
+            Clip.item = self.draw_clip(Clip.spoint, Clip.epoint, self.clip_color)
             self.clip_push(Clip.spoint, Clip.epoint)
 
     def add_line(self):
@@ -242,7 +258,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             ErrorInput("Длина отрезка должна быть больше нуля.")
         else:
             self.stack_update()
-            Line._list.append((Line.spoint, Line.epoint))
+            Line._list.append((Line.spoint[0], Line.spoint[1], Line.epoint[0], Line.epoint[1]))
             self.draw_line(Line.spoint, Line.epoint, self.line_color)
             self.table_push_line(Line.spoint, Line.epoint)
 
@@ -302,36 +318,56 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
     def draw_clip(self, point_a, point_b, color):
         point, width, height = self.vert_clip(point_a, point_b)
         point = (round(point[0] + self.canvas_center[0]), round(self.canvas_center[1] - point[1]))
-        self._draw_rect(self.pixmap_sub, point, width, height, color)
+        clip = self._draw_rect(self.scene, point, width, height, color, 1)
         self.canvas_update()
+
+        return clip
 
     def draw_line(self, point_a, point_b, color):
         point_a = (round(point_a[0] + self.canvas_center[0]), round(self.canvas_center[1] - point_a[1]))
         point_b = (round(point_b[0] + self.canvas_center[0]), round(self.canvas_center[1] - point_b[1]))
-        self._draw_line(self.pixmap, point_a, point_b, color)
+        line = self._draw_line(self.scene, point_a, point_b, color, 1)
         self.canvas_update()
 
-    def _draw_rect(self, pixmap, point, width, height, color):
-        painter = QPainter(pixmap)
-        painter.setPen(QColor(color))
-        painter.drawRect(point[0], point[1], width, height)
-        painter.end()
+        return line
 
-    def _draw_point(self, pixmap, point, color):
-        painter = QPainter(pixmap)
-        painter.setPen(QColor(color))
-        painter.drawPoint(round(point[0]), round(point[1]))
-        painter.end()
+    def _draw_rect(self, scene, point, width, height, color, size):
+        pen = QtGui.QPen(Qt.SolidLine)
+        pen.setWidth(size)
+        pen.setColor(QColor(color))
+        rect = scene.addRect(point[0], point[1], width, height, pen)
 
-    def _draw_line(self, pixmap, point_a, point_b, color):
-        painter = QPainter(pixmap)
-        painter.setPen(QColor(color))   
-        painter.drawLine(round(point_a[0]), round(point_a[1]), round(point_b[0]), round(point_b[1]))
-        painter.end()
+        return rect
+
+    def _draw_line(self, scene, point_a, point_b, color, size):
+        pen = QtGui.QPen(Qt.SolidLine)
+        pen.setWidth(size)
+        pen.setColor(QColor(color))
+        line = scene.addLine(point_a[0], point_a[1], point_b[0], point_b[1], pen)
+        
+        return line
     
     def draw_point(self, point, color):
         point = (round(point[0] + self.canvas_center[0]), round(self.canvas_center[1] - point[1]))
         self._draw_point(point, color)
+        self.canvas_update()
+
+    def clipper_line(self):
+        if Clip.spoint == None or Clip.epoint == None:
+            return ErrorInput("Необходимо задать отсекатель.")
+        if len(Line._list) < 1:
+            return ErrorInput("Необходимо задать отрезки.")
+        self.stack_update()
+        self.result_refresh()
+        for line in Line._list:
+            new_line = cohenSutherlandClipper((Clip.spoint, Clip.epoint), 
+                                              (line[0], line[1], line[2], line[3]))
+            if new_line != None:
+                Line._res_list.append(self._draw_line(self.scene, 
+                               (new_line[0] + self.canvas_center[0], self.canvas_center[1] - new_line[1]),
+                               (new_line[2] + self.canvas_center[0], self.canvas_center[1] - new_line[3]),
+                               self.result_color, 1))
+
         self.canvas_update()
 
     def show_info(self):
@@ -410,22 +446,20 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.scale_minus()
         elif event.key() == Qt.Key_Escape:
             self.close_app()
-        elif event.key() == Qt.Key_C:
+        elif event.key() == Qt.Key_V:
             self.draw_mode_change()
-        '''
-         elif event.key() == Qt.Key_Q:
-            self.canvas_c()
+        elif event.key() == Qt.Key_Q:
+            self.canvas_clear()
         elif event.key() == Qt.Key_B:
             self.undo()
         elif event.key() == Qt.Key_C:
             self.set_color()
-        elif event.key() == Qt.Key_V:
+        elif event.key() == Qt.Key_X:
             currentIndex = self.comboBox_color.currentIndex()
             count = self.comboBox_color.count()
             nextIndex = (currentIndex + 1) % count
             self.comboBox_color.setCurrentIndex(nextIndex)
-        '''
-   
+
     def showEvent(self, event):
         self.color_start_set()
         self.draw_mode_set()
@@ -443,16 +477,27 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             point = [(round(pos_scene.x()) - (self.canvas_center[0])), 
                     -(round(pos_scene.y()) - (self.canvas_center[1]))]
             if self.radioButton_line.isChecked():
+                self.line.setLine(pos_scene.x(), pos_scene.y(), pos_scene.x(), pos_scene.y())
+                self.line.setVisible(True)
                 self.add_line_mouse(point)
             elif self.radioButton_clip.isChecked():
+                self.rect_.setRect(pos_scene.x(), pos_scene.y(), 0, 0)
+                self.ground = [pos_scene.x(), pos_scene.y()]
+                self.rect_.setVisible(True)
                 self.add_clip_mouse(point)
         elif event.button() == Qt.RightButton or event.button() == Qt.MiddleButton:
             self._last_mouse_pos = self.graphicsView.mapToScene(event.pos())
             
     def canvasMoveEvent(self, event):
+        pos_scene = self.graphicsView.mapToScene(event.pos())
+        if self.line.isVisible():
+            self.line.setLine(self.line.line().x1(), self.line.line().y1(), pos_scene.x(), pos_scene.y())
+        if self.rect_.isVisible():
+            point = (min(self.ground[0], pos_scene.x()), min(self.ground[1], pos_scene.y()))
+            w = abs(max(self.ground[0], pos_scene.x()) - min(self.ground[0], pos_scene.x()))
+            h = abs(max(self.ground[1], pos_scene.y()) - min(self.ground[1], pos_scene.y()))
+            self.rect_.setRect(point[0], point[1], w, h)
         if event.buttons() == Qt.RightButton or event.buttons() == Qt.MiddleButton:
-            pos_scene = self.graphicsView.mapToScene(event.pos())
-
             x_diff = int((pos_scene.x() - self._last_mouse_pos.x()) * self.scale)
             y_diff = int((pos_scene.y() - self._last_mouse_pos.y()) * self.scale)
 
@@ -463,7 +508,19 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
             self.graphicsView.verticalScrollBar().setValue(y_val - y_diff)
 
             self._last_mouse_pos =  self.graphicsView.mapToScene(event.pos())
-        super().mouseMoveEvent(event)
+
+    def canvasReleaseEvent(self, event):
+        pos_scene = self.graphicsView.mapToScene(event.pos())
+        point = [(round(pos_scene.x()) - (self.canvas_center[0])), 
+                    -(round(pos_scene.y()) - (self.canvas_center[1]))]
+        if event.button() == Qt.LeftButton:
+            if self.radioButton_line.isChecked():
+                self.line.setVisible(False)
+                self.add_line_mouse(point)
+            elif self.radioButton_clip.isChecked():
+                self.rect_.setVisible(False)
+                self.add_clip_mouse(point)
+            self.line.setVisible(False)
 
     def close_app(self):
         buttonReply = QMessageBox.question(self, 'Завершение работы', 
@@ -474,6 +531,23 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
     def closeEvent(self, event):
         self.close_app()
+
+    def dashline_init(self):
+        pen = QtGui.QPen(Qt.DashLine)
+        pen.setWidth(1)
+        pen.setColor(Qt.lightGray)
+
+        self.line = self.scene.addLine(0, 0, 0, 0, pen)
+        self.line.setVisible(False)
+    
+    def dashrect_rect(self):
+        pen = QtGui.QPen(Qt.DashLine)
+        pen.setWidth(1)
+        pen.setColor(Qt.lightGray)
+
+        self.rect_ = self.scene.addRect(0, 0, 0, 0, pen)
+        self.rect_.setVisible(False)
+        self.ground = None
 
 class Info(QWidget, Ui_TaskPopup):
     def __init__(self):
