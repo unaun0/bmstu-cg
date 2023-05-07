@@ -191,9 +191,8 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
         self.view_size = (self.graphicsView.width(), self.graphicsView.height())
         self.canvas_center = (self.canvas_size[0] / 2, self.canvas_size[1] / 2)
 
+        self.graphicsView.resetTransform()
         self.scene_clear()
-
-        self.scene.addPixmap(self.pixmap)
 
         self.dashline_init()
         self.dashrect_point()
@@ -206,7 +205,7 @@ class MainWindow(QtWidgets.QMainWindow, Ui_MainWindow):
 
         self.tableWidget_clip.clearContents()
         self.tableWidget_clip.setRowCount(0)
-
+        
         self.scale = 1
         
         Line.spoint = None
