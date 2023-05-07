@@ -42,8 +42,8 @@ def poly_to_edges(poly):
     return edges
 
 def CyrusBeckClipper(p1, p2, clipper):
-    dx = p2[0] - p1[0]
-    dy = p2[1] - p1[1]
+    dx = (p2[0] - p1[0])
+    dy = (p2[1] - p1[1])
 
     t_min = 0
     t_max = 1
@@ -54,15 +54,20 @@ def CyrusBeckClipper(p1, p2, clipper):
 
         dx_edge = p2_edge[0] - p1_edge[0]
         dy_edge = p2_edge[1] - p1_edge[1]
+
         normal = (-dy_edge, dx_edge)
 
         p1_to_p1_edge = (p1[0] - p1_edge[0], p1[1] - p1_edge[1])
 
-        numerator = normal[0] * p1_to_p1_edge[0] + normal[1] * p1_to_p1_edge[1]
         denominator = normal[0] * dx + normal[1] * dy
+        numerator = normal[0] * p1_to_p1_edge[0] + normal[1] * p1_to_p1_edge[1]
 
         if denominator == 0:  # отрезок параллелен грани отсекателя
-            if numerator < 0:  # отрезок за гранью отсекателя
+            if dy == 0:
+                numerator = -normal[0] * p1_to_p1_edge[0] + -normal[1] * p1_to_p1_edge[1]
+            if dx == 0:
+                numerator = -normal[0] * p1_to_p1_edge[0] + normal[1] * p1_to_p1_edge[1]
+            if numerator < 0:
                 return None
         else:
             t = -numerator / denominator
