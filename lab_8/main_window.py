@@ -677,7 +677,7 @@ class Ui_MainWindow(object):
 
     def retranslateUi(self, MainWindow):
         _translate = QtCore.QCoreApplication.translate
-        MainWindow.setWindowTitle(_translate("MainWindow", "MainWindow"))
+        MainWindow.setWindowTitle(_translate("MainWindow", "Отсекатель"))
         self.groupBox_figure.setStatusTip(_translate("MainWindow", "Отрезки"))
         self.groupBox_figure.setTitle(_translate("MainWindow", "Отрезки"))
         item = self.tableWidget_line.horizontalHeaderItem(0)
